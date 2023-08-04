@@ -119,6 +119,29 @@ class CalendarApp:
         tk.Radiobutton(self.root, text="6 дней", variable=self.working_days, value=6, command=self.show_calendar).pack(side=tk.LEFT)
         tk.Radiobutton(self.root, text="7 дней", variable=self.working_days, value=7, command=self.show_calendar).pack(side=tk.LEFT)
 
+    def create_working_hours_schedule(self):
+        working_hours_frame = tk.Frame(self.root)
+        working_hours_frame.pack(pady=10)
+
+        ttk.Label(working_hours_frame, text="Выберите режим работы:").grid(row=0, column=0, padx=5, pady=5)
+
+        self.working_hours = tk.StringVar()
+        self.working_hours.set("9-18")
+
+        ttk.Radiobutton(working_hours_frame, text="9-18", variable=self.working_hours, value="9-18", command=self.apply_working_hours).grid(row=0, column=1, padx=5, pady=5)
+        ttk.Radiobutton(working_hours_frame, text="8-19", variable=self.working_hours, value="8-19", command=self.apply_working_hours).grid(row=0, column=2, padx=5, pady=5)
+
+        ttk.Button(working_hours_frame, text="Применить", command=self.apply_working_hours, style="Main.TButton").grid(row=0, column=3, padx=5, pady=5)
+
+
+    def apply_working_hours(self):
+        selected_hours = self.working_hours.get()
+        if selected_hours == "9-18":
+            self.working_days.set(5)
+        elif selected_hours == "8-19":
+            self.working_days.set(6)
+        self.show_calendar()
+
     def show_calendar(self):
         for widget in self.calendar_frame.winfo_children():
             widget.destroy()
