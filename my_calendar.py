@@ -59,7 +59,7 @@ class CalendarApp:
 
         self.create_calendar()
         self.create_task_list()
-        self.create_working_days_schedule()
+        self.create_working_days_schedule()  # Добавлен вызов функции
 
         self.selected_day_label = tk.Label(root, text="", font="Helvetica 12")
         self.selected_day_label.pack(pady=10)
@@ -86,7 +86,6 @@ class CalendarApp:
         style = ttk.Style()
         style.configure("Main.TButton", font="Helvetica 12")
 
-# основной код
     def create_calendar(self):
         self.calendar_frame = tk.Frame(self.root)
         self.calendar_frame.pack(pady=10)
