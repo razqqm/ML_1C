@@ -1,136 +1,142 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, simpledialog
 from tkcalendar import Calendar
-import calendar
-import datetime
+from datetime import datetime, timedelta
+import json
+import os
 
-class TaskDialog(tk.Toplevel):
-    def __init__(self, master):
-        super().__init__(master)
-
-        self.title("Add task")
-
+class TaskDialog(simpledialog.Dialog):
+    def body(self, master):
         self.task_name = tk.StringVar()
         self.duration_hours = tk.IntVar()
-        self.duration_minutes = tk.IntVar()
-        self.user_id = tk.IntVar()
-        self.priority = tk.IntVar()
-
-        tk.Label(self, text="Task name:").pack(pady=5)
-        tk.Entry(self, textvariable=self.task_name).pack(pady=5)
+        self.duration_minutes = tk.IntVar(value=15)
+        self.user_id = tk.IntVar(value=1000)
         
-        tk.Label(self, text="Duration (hours):").pack(pady=5)
-        tk.Entry(self, textvariable=self.duration_hours).pack(pady=5)
-        
-        tk.Label(self, text="Duration (minutes):").pack(pady=5)
-        tk.Entry(self, textvariable=self.duration_minutes).pack(pady=5)
+        tk.Label(master, text="Имя задачи:").grid(row=0)
+        tk.Entry(master, textvariable=self.task_name).grid(row=0, column=1)
+        tk.Label(master, text="Часы:").grid(row=1)
+        tk.Spinbox(master, from_=0, to=100, textvariable=self.duration_hours).grid(row=1, column=1)
+        tk.Label(master, text="Минуты (кратно 15):").grid(row=2)
+        tk.Spinbox(master, from_=0, to=59, increment=15, textvariable=self.duration_minutes).grid(row=2, column=1)
+        tk.Label(master, text="ID пользователя:").grid(row=3)
+        tk.Entry(master, textvariable=self.user_id).grid(row=3, column=1)
 
-        tk.Label(self, text="User ID:").pack(pady=5)
-        tk.Entry(self, textvariable=self.user_id).pack(pady=5)
+        return tk.Entry(master, textvariable=self.task_name)  # initial focus
 
-        tk.Label(self, text="Priority:").pack(pady=5)
-        tk.Entry(self, textvariable=self.priority).pack(pady=5)
-
-        ttk.Button(self, text="OK", command=self.add_task).pack(pady=10)
-
-    def add_task(self):
+    def apply(self):
         task = {
             "name": self.task_name.get(),
-            "duration": self.duration_hours.get() * 60 + self.duration_minutes.get(),
-            "user_id": self.user_id.get(),
-            "priority": self.priority.get()
+            "hours": self.duration_hours.get(),
+            "minutes": self.duration_minutes.get(),
+            "user_id": self.user_id.get()
         }
-        self.master.tasks.append(task)
-        self.destroy()
+        self.result = task
 
 class CalendarApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Calendar")
-        self.root.geometry("800x600")
-        
+        self.tasks_filename = "tasks.json"
         self.tasks = []
-        self.time_boxes = [[None for _ in range(32)] for _ in range(7)]
-        
-        self.year = tk.IntVar(value=datetime.datetime.now().year)
-        self.month = tk.IntVar(value=datetime.datetime.now().month)
-        self.working_days = tk.IntVar(value=5)
+        self.load_tasks()
 
-        self.create_ui()
+        self.cal = Calendar(self.root, selectmode="day", year=datetime.today().year, month=datetime.today().month, day=datetime.today().day)
+        self.cal.pack(fill="both", expand=True)
 
-    def create_ui(self):
-        controls_frame = ttk.Frame(self.root)
-        controls_frame.pack(pady=5)
-        
-        ttk.Label(controls_frame, text="Year:").pack(side=tk.LEFT)
-        ttk.Entry(controls_frame, textvariable=self.year).pack(side=tk.LEFT)
+        self.create_task_list()
+        self.highlight_workdays()
+        self.cal.bind("<<CalendarMonthChanged>>", lambda e: self.highlight_workdays())
 
-        ttk.Label(controls_frame, text="Month:").pack(side=tk.LEFT)
-        ttk.Entry(controls_frame, textvariable=self.month).pack(side=tk.LEFT)
-        
-        ttk.Label(controls_frame, text="Working days:").pack(side=tk.LEFT)
-        ttk.Entry(controls_frame, textvariable=self.working_days).pack(side=tk.LEFT)
+    def highlight_workdays(self, event=None):
+        self.cal.calevent_remove('all')  # Очищаем все события
+        date = datetime.strptime(self.cal.get_date(), "%d.%m.%Y")
 
-        ttk.Button(controls_frame, text="Show calendar", command=self.show_calendar).pack(side=tk.LEFT, padx=5)
-        
-        self.table_frame = ttk.Frame(self.root)
-        self.table_frame.pack(fill=tk.BOTH, expand=True)
+        # Определяем первый и последний день месяца
+        start_date = datetime(date.year, date.month, 1)
+        if date.month == 12:
+            end_date = datetime(date.year+1, 1, 1) - timedelta(days=1)
+        else:
+            end_date = datetime(date.year, date.month+1, 1) - timedelta(days=1)
 
-        task_controls_frame = ttk.Frame(self.root)
-        task_controls_frame.pack(pady=5)
+        # Выделяем рабочие дни
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.weekday() < 5:  # Понедельник - Пятница
+                self.cal.calevent_create(current_date, 'Рабочий день', 'workday')
+            current_date += timedelta(days=1)
+        self.cal.tag_config('workday', background='light green')
 
-        ttk.Button(task_controls_frame, text="Add task", command=self.add_task).pack(side=tk.LEFT, padx=5)
-        ttk.Button(task_controls_frame, text="Simulate", command=self.simulate).pack(side=tk.LEFT, padx=5)
+    def on_month_changed(self, event):
+        self.highlight_workdays()
 
-    def add_task(self):
-        TaskDialog(self)
+    def create_task_list(self):
+        self.task_frame = tk.Frame(self.root)
+        self.task_frame.pack(padx=10,pady=10)
 
-    def show_calendar(self):
-        for widget in self.table_frame.winfo_children():
-            widget.destroy()
-
-        self.time_boxes = [[None for _ in range(32)] for _ in range(7)]
-        
-        cal = calendar.monthcalendar(self.year.get(), self.month.get())
-        for i in range(len(cal)):
-            for j in range(7):
-                if cal[i][j] != 0:
-                    cell_text = str(cal[i][j])
-                    label = tk.Label(self.table_frame, text=cell_text, borderwidth=2, relief="solid", width=5, height=2)
-                    label.grid(row=i, column=j)
-                    self.time_boxes[j][cal[i][j]] = label
-
-        self.update_calendar()
-
-    def update_calendar(self):
-        for i in range(len(self.time_boxes)):
-            for j in range(len(self.time_boxes[i])):
-                if self.time_boxes[i][j] is not None:
-                    self.time_boxes[i][j]["text"] = str(j) + "\n"
-
-    def simulate(self):
-        self.tasks.sort(key=lambda x: x["priority"], reverse=True)
-
-        day_time = 480 # 8 hours in minutes
-        day_limit = self.working_days.get()
-        month_days = calendar.monthrange(self.year.get(), self.month.get())[1]
-
-        day = 1
-        weekday = datetime.datetime(self.year.get(), self.month.get(), day).weekday()
+        self.task_listbox = tk.Listbox(self.task_frame, selectmode=tk.SINGLE, height=10, width=80)
+        self.task_listbox.pack(side=tk.TOP, expand=True, fill=tk.BOTH)
 
         for task in self.tasks:
-            while task["duration"] > 0 and day <= month_days:
-                if weekday < day_limit: # working day
-                    if task["duration"] >= day_time: # task lasts whole day
-                        self.time_boxes[weekday][day]["text"] += task["name"] + "\n"
-                        task["duration"] -= day_time
-                    else: # task lasts part of the day
-                        self.time_boxes[weekday][day]["text"] += task["name"] + " (" + str(task["duration"]) + "m)\n"
-                        task["duration"] = 0
+            task_text = f"{task['name']} ({task['hours']} часов {task['minutes']} минут), ID пользователя: {task['user_id']}"
+            self.task_listbox.insert(tk.END, task_text)
 
-                day += 1
-                weekday = datetime.datetime(self.year.get(), self.month.get(), day).weekday() if day <= month_days else 7
+        task_control_frame = tk.Frame(self.task_frame)
+        task_control_frame.pack(side=tk.TOP)
 
-root = tk.Tk()
-app = CalendarApp(root)
-root.mainloop()
+        ttk.Button(task_control_frame, text="Добавить", command=self.add_task).pack(side=tk.LEFT, padx=5)
+        ttk.Button(task_control_frame, text="Удалить", command=self.delete_task).pack(side=tk.LEFT, padx=5)
+        ttk.Button(task_control_frame, text="Редактировать", command=self.edit_task).pack(side=tk.LEFT, padx=5)
+
+    def add_task(self):
+        dialog = TaskDialog(self.root)
+        task = dialog.result
+        if task:
+            self.tasks.append(task)
+            task_text = f"{task['name']} ({task['hours']} часов {task['minutes']} минут), ID пользователя: {task['user_id']}"
+            self.task_listbox.insert(tk.END, task_text)
+            self.save_tasks()
+
+    def delete_task(self):
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            del self.tasks[selected_index[0]]
+            self.task_listbox.delete(selected_index)
+            self.save_tasks()
+
+    def edit_task(self):
+        selected_index = self.task_listbox.curselection()
+        if selected_index:
+            task = self.tasks[selected_index[0]]
+            dialog = TaskDialog(self.root)
+            dialog.task_name.set(task['name'])
+            dialog.duration_hours.set(task['hours'])
+            dialog.duration_minutes.set(task['minutes'])
+            dialog.user_id.set(task['user_id'])
+            
+            new_task = dialog.result
+            if new_task:
+                self.tasks[selected_index[0]] = new_task
+                task_text = f"{new_task['name']} ({new_task['hours']} часов {new_task['minutes']} минут), ID пользователя: {new_task['user_id']}"
+                self.task_listbox.delete(selected_index)
+                self.task_listbox.insert(selected_index, task_text)
+                self.save_tasks()
+
+    def load_tasks(self):
+        try:
+            if os.path.exists(self.tasks_filename):
+                with open(self.tasks_filename, 'r', encoding='utf-8') as file:
+                    self.tasks = json.load(file)
+            else:
+                self.tasks = []
+        except json.JSONDecodeError:
+            print("Файл задач поврежден или имеет неверный формат. Создание нового файла.")
+            self.tasks = []
+
+    def save_tasks(self):
+        with open(self.tasks_filename, 'w', encoding='utf-8') as file:
+            json.dump(self.tasks, file, ensure_ascii=False, indent=4)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Графический Календарь")
+    app = CalendarApp(root)
+    root.mainloop()

@@ -6,9 +6,15 @@
         "user_id": 1000
     },
     {
-        "name": "23213",
+        "name": "авыавыа",
         "hours": 0,
         "minutes": 15,
+        "user_id": 1000
+    },
+    {
+        "name": "3213",
+        "hours": 0,
+        "minutes": 30,
         "user_id": 1000
     }
 ]
