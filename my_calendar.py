@@ -140,3 +140,4 @@ if __name__ == "__main__":
     root.title("Графический Календарь")
     app = CalendarApp(root)
     root.mainloop()
+# E
